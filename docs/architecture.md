@@ -1,10 +1,40 @@
-# Architecture
+# OpenRelief Architecture
 
-OpenRelief separates adapters from domain decisions and persistence. Inputs cross validation boundaries before reaching the core. The core returns explicit evidence rather than hiding uncertainty. Storage is replaceable, and network/provider side effects are injectable so tests remain deterministic.
+## System context
 
-## Data flow
-1. An operator or client submits bounded input.
-2. The adapter validates syntax and authorization context.
-3. The domain engine performs the operation and assigns an explicit state.
-4. Evidence is persisted or returned in a structured response.
-5. Callers decide notification and operational escalation policy.
+OpenRelief writes validated submissions to device-local persistence first, so collection does not depend on connectivity. Each mutation enters a versioned queue. The network adapter retries pending work, while the synchronization engine compares local and remote versions. Compatible mutations become `SYNCED`; divergent content becomes an explicit `CONFLICT` containing both copies. An authorized user selects local or remote resolution, creates a new version, and records the decision in audit history.
+
+## Component diagram
+
+```mermaid
+flowchart LR
+  Worker[Field worker] --> Form[Configurable form validation]
+  Form --> Local[(Device-local records)]
+  Local --> Queue[Versioned sync queue]
+  Queue --> Network{Connection available?}
+  Network -->|No| Retry[Backoff and pending state]
+  Retry --> Queue
+  Network -->|Yes| Server[(Server records)]
+  Server --> Compare[Version comparison]
+  Compare -->|Compatible| Synced[SYNCED]
+  Compare -->|Diverged| Conflict[CONFLICT]
+  Conflict --> Resolve{Authorized resolution}
+  Resolve -->|Local| Server
+  Resolve -->|Remote| Local
+  Form & Compare & Resolve --> Audit[(Audit history)]
+```
+
+## Data and control flow
+
+The solid arrows show runtime data or control flow. Dotted arrows, where present, describe policy rather than runtime connectivity. Domain decisions remain independent of CLI and HTTP delivery so they can be tested without binding sockets or paid services. Inputs are validated before persistence or outbound I/O, and evidence is retained at the point where the system makes an operational decision.
+
+## Trust boundaries
+
+1. **External input boundary:** network targets, telemetry, identity requests, documents, logs, or field records are untrusted.
+2. **Domain boundary:** validated values enter deterministic policy and state-transition logic.
+3. **Persistence boundary:** parameterized or structured writes protect stored operational evidence.
+4. **Operator boundary:** alerts, conflict choices, infrastructure deployment, and other consequential actions remain explicit operator responsibilities.
+
+## Failure behavior
+
+Adapters return explicit errors or states rather than manufacturing successful results. Timeouts and unavailable dependencies affect only the relevant operation. The limitations documented in the README define what cannot be inferred from the available evidence.

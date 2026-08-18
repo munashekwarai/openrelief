@@ -20,11 +20,20 @@ An offline store validates configurable forms, queues versioned mutations, retri
 ## Architecture
 ```mermaid
 flowchart LR
-  Input[Validated input] --> Core[Domain engine]
-  Core --> Store[(Durable store)]
-  CLI[CLI] --> Core
-  API[REST API] --> Core
-  Core --> Evidence[Results and evidence]
+  Worker[Field worker] --> Form[Configurable form validation]
+  Form --> Local[(Device-local records)]
+  Local --> Queue[Versioned sync queue]
+  Queue --> Network{Connection available?}
+  Network -->|No| Retry[Backoff and pending state]
+  Retry --> Queue
+  Network -->|Yes| Server[(Server records)]
+  Server --> Compare[Version comparison]
+  Compare -->|Compatible| Synced[SYNCED]
+  Compare -->|Diverged| Conflict[CONFLICT]
+  Conflict --> Resolve{Authorized resolution}
+  Resolve -->|Local| Server
+  Resolve -->|Remote| Local
+  Form & Compare & Resolve --> Audit[(Audit history)]
 ```
 See [architecture](docs/architecture.md).
 
