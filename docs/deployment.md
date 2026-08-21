@@ -1,3 +1,12 @@
-# Deployment
+# OpenRelief Deployment
 
-Create an isolated runtime, install pinned dependencies from the project metadata, configure environment values outside version control, run tests, then start the documented service behind a TLS reverse proxy. Restrict the listener and database to required principals, collect structured logs, monitor health, and test encrypted backup restoration before relying on the service. Roll back by deploying the preceding immutable revision and restoring only schema-compatible data.
+```bash
+npm ci && npm run typecheck && npm test && npm run build
+OPENRELIEF_DATA=/var/lib/openrelief/openrelief.json HOST=127.0.0.1 PORT=3001 npm start
+```
+
+Or run `docker compose up --build -d`. Localhost permits service workers over HTTP; remote deployments require HTTPS. Replace development identity headers with an authenticated proxy or identity adapter before any remote or real-data use.
+
+Back up the server state after quiescing writes or through a storage adapter snapshot. Recovery must verify forms, records, processed mutation IDs, unresolved conflicts, and audit ordering. Device recovery needs a separate operational plan because unsynchronized IndexedDB data exists only on that device.
+
+For multi-instance use, implement the `Store` interface with a transactional database, unique mutation IDs, compare-and-swap record versions, durable audit, and tenant/project keys.

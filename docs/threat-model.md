@@ -1,15 +1,16 @@
-# Threat Model
+# OpenRelief Threat Model
 
-## Assets
-Service availability, stored evidence, configuration, credentials, audit integrity, and operator trust.
+| Threat | Implemented control | Production requirement |
+|---|---|---|
+| Submission loss while offline | IndexedDB-first queue and cached shell | Device backup/management and storage monitoring |
+| Duplicate after timeout | Stable processed mutation IDs | Database uniqueness across replicas |
+| Silent overwrite | Base-version conflict detection | Transactional compare-and-swap storage |
+| Malicious conflict resolution | Role check and audited explicit strategy | Strong identity, assignment authorization, review |
+| Invalid/stale form values | Exact form-version validation | Form migration and retirement governance |
+| Lost/stolen field device | Browser storage only | Full-disk encryption, lock, remote wipe, offline expiry |
+| Identity spoofing | None in development header adapter | Replace with cryptographic authentication before deployment |
+| Cross-tenant disclosure | Single-project reference | Tenant keys and authorization on every query/mutation |
+| Local/server data tampering | Atomic file replacement and audit evidence | Encrypted transactional store and immutable audit export |
+| Resource exhaustion | HTTP body and schema bounds | Rate limits, quotas, attachment controls |
 
-## Threats and controls
-- Malformed or oversized input: bounds, schemas, and rejection before processing.
-- Injection: parameterized storage and no shell interpolation of user values.
-- Unauthorized access: deployment authentication, least privilege, and ownership/RBAC where the domain requires it.
-- Replay and flooding: idempotency/version checks, timeouts, rate policy, and auditable failures.
-- Secret disclosure: environment injection, ignored local files, and redacted errors.
-- Supply-chain compromise: small dependency surface, lock/pin review, and CI.
-
-## Residual risk
-A reference sync engine cannot choose the correct real-world conflict outcome or replace device security and operational governance.
+The platform cannot determine which conflicting observation is factually correct. Eventual consistency makes temporary divergence expected. Device compromise, coerced users, false field observations, and physical safety procedures remain outside software-only guarantees.

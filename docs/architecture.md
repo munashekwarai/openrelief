@@ -1,40 +1,37 @@
 # OpenRelief Architecture
 
-## System context
+## Offline boundary
 
-OpenRelief writes validated submissions to device-local persistence first, so collection does not depend on connectivity. Each mutation enters a versioned queue. The network adapter retries pending work, while the synchronization engine compares local and remote versions. Compatible mutations become `SYNCED`; divergent content becomes an explicit `CONFLICT` containing both copies. An authorized user selects local or remote resolution, creates a new version, and records the decision in audit history.
-
-## Component diagram
+The service worker caches only the application shell and GET responses. New records are written to IndexedDB first, so a POST is never the sole copy. Queue entries contain a stable mutation ID, base record version, device and user provenance, enqueue time, attempts, and next attempt. Online events trigger synchronization, but users can also initiate it explicitly.
 
 ```mermaid
-flowchart LR
-  Worker[Field worker] --> Form[Configurable form validation]
-  Form --> Local[(Device-local records)]
-  Local --> Queue[Versioned sync queue]
-  Queue --> Network{Connection available?}
-  Network -->|No| Retry[Backoff and pending state]
-  Retry --> Queue
-  Network -->|Yes| Server[(Server records)]
-  Server --> Compare[Version comparison]
-  Compare -->|Compatible| Synced[SYNCED]
-  Compare -->|Diverged| Conflict[CONFLICT]
-  Conflict --> Resolve{Authorized resolution}
-  Resolve -->|Local| Server
-  Resolve -->|Remote| Local
-  Form & Compare & Resolve --> Audit[(Audit history)]
+sequenceDiagram
+ participant W as Field worker
+ participant I as IndexedDB queue
+ participant A as Sync API
+ participant S as Server store
+ W->>I: save validated record (PENDING)
+ loop connection available and retry due
+  I->>A: mutation ID + base version + record
+  A->>S: validate exact form version
+  alt mutation already processed
+   S-->>I: IDEMPOTENT
+  else base version matches
+   S->>S: increment version + audit
+   S-->>I: SYNCED
+  else remote version diverged
+   S->>S: retain remote + conflict + audit
+   S-->>I: CONFLICT with both copies
+  end
+ end
 ```
 
-## Data and control flow
+## Consistency model
 
-The solid arrows show runtime data or control flow. Dotted arrows, where present, describe policy rather than runtime connectivity. Domain decisions remain independent of CLI and HTTP delivery so they can be tested without binding sockets or paid services. Inputs are validated before persistence or outbound I/O, and evidence is retained at the point where the system makes an operational decision.
+OpenRelief uses eventual consistency with optimistic concurrency. Creation starts at version zero. The server assigns version one. Every update declares the remote version it was based on. Only an exact match advances the record. A mismatch never uses last-write-wins; it stores a conflict while leaving the accepted remote record unchanged.
 
-## Trust boundaries
+Resolution is a new audited version. `LOCAL` accepts the queued copy, `REMOTE` retains the accepted copy, and `MERGE` requires explicit values that pass the original form version's validation. Mutation IDs make ambiguous network retries safe.
 
-1. **External input boundary:** network targets, telemetry, identity requests, documents, logs, or field records are untrusted.
-2. **Domain boundary:** validated values enter deterministic policy and state-transition logic.
-3. **Persistence boundary:** parameterized or structured writes protect stored operational evidence.
-4. **Operator boundary:** alerts, conflict choices, infrastructure deployment, and other consequential actions remain explicit operator responsibilities.
+## Persistence adapters
 
-## Failure behavior
-
-Adapters return explicit errors or states rather than manufacturing successful results. Timeouts and unavailable dependencies affect only the relevant operation. The limitations documented in the README define what cannot be inferred from the available evidence.
+The browser uses IndexedDB. The local server uses atomic temporary-file replacement with mode 600. Tests use an in-memory adapter implementing the same state contract. A multi-process deployment must replace the file adapter with transactional shared storage and uniqueness constraints for mutation IDs and record versions.

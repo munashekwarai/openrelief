@@ -1,0 +1,11 @@
+services:
+  openrelief:
+    build: .
+    ports: ["127.0.0.1:3001:3001"]
+    environment: {OPENRELIEF_DATA: /data/openrelief.json, HOST: 0.0.0.0, PORT: 3001}
+    volumes: ["openrelief_data:/data"]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+volumes: {openrelief_data: {}}
